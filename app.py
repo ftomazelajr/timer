@@ -1,7 +1,8 @@
 from flask import Flask, render_template, request, jsonify
 import paho.mqtt.client as mqtt
 import json
-from datetime import datetime
+import random
+import os
 
 app = Flask(__name__)
 
@@ -25,24 +26,26 @@ def adicionar_log(esp_id, mensagem):
         if len(clientes[esp_id]["logs"]) > 20:
             clientes[esp_id]["logs"].pop(0)
 
-# --- CALLBACK DE CONEXÃO (Garante re-inscrição se a conexão oscilar no Render) ---
+# --- CALLBACK DE CONEXÃO ---
 def on_connect(client, userdata, flags, rc, properties=None):
     if rc == 0:
-        print("✅ Conectado ao Broker MQTT no Render!")
-        # Inscreve nos tópicos SEMPRE que conectar/reconectar
+        print("✅ [MQTT] Conectado com sucesso ao Broker HiveMQ!")
+        # Inscreve nos tópicos dinâmicos do cliente
         client.subscribe("piscina/+/logs")
         client.subscribe("piscina/+/status")
         client.subscribe("piscina/+/config")
     else:
-        print(f"❌ Falha ao conectar ao MQTT, código de retorno: {rc}")
+        print(f"❌ [MQTT] Erro ao conectar ao Broker, código de retorno: {rc}")
 
-# --- CALLBACK DE MENSAGENS RECEBIDAS ---
+# --- CALLBACK DE MENSAGENS RECEBIDAS DO ESP32 ---
 def on_message(client, userdata, msg):
     try:
         topico = msg.topic.split('/')
         esp_id = topico[1]
         tipo = topico[2]
         payload = msg.payload.decode("utf-8")
+
+        print(f"📥 [MQTT RECEBIDO] Tópico: {msg.topic} | Payload: {payload}")
 
         if esp_id in clientes:
             if tipo == "logs":
@@ -68,19 +71,25 @@ def on_message(client, userdata, msg):
                 clientes[esp_id]["timer_desliga"] = f"{h_d}:{m_d}"
                 
     except Exception as e:
-        print(f"Erro ao processar mensagem MQTT: {e}")
+        print(f"⚠️ Erro ao processar mensagem MQTT recebida: {e}")
 
-# --- INICIALIZAÇÃO MQTT (COMPATÍVEL COM PAHO V2 E RENDER) ---
-mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="SERVER_FLASK_PISCINA")
+# --- CLIENT ID DINÂMICO (Impede desconexão automática no HiveMQ) ---
+CLIENT_ID = f"SERVER_FLASK_{random.randint(10000, 99999)}"
+
+mqtt_client = mqtt.Client(
+    callback_api_version=mqtt.CallbackAPIVersion.VERSION2, 
+    client_id=CLIENT_ID
+)
 mqtt_client.on_connect = on_connect
 mqtt_client.on_message = on_message
 
 try:
-    mqtt_client.connect(MQTT_BROKER, MQTT_PORT, 60)
+    mqtt_client.connect(MQTT_BROKER, MQTT_PORT, keepalive=60)
     mqtt_client.loop_start()
 except Exception as e:
-    print(f"Erro ao iniciar cliente MQTT: {e}")
+    print(f"🚨 Erro fatal ao conectar no MQTT: {e}")
 
+# --- ROTAS FLASK ---
 @app.route('/')
 def index():
     return render_template('dashboard.html')
@@ -97,10 +106,21 @@ def enviar_comando():
     
     if esp_id in clientes:
         topico = f"piscina/{esp_id}/comando"
-        mqtt_client.publish(topico, json.dumps(payload))
-        return jsonify({"status": "sucesso"})
+        
+        # Converte dicionários/JSONs se necessário, mas mantém strings limpas
+        if isinstance(payload, (dict, list)):
+            mensagem_envio = json.dumps(payload)
+        else:
+            mensagem_envio = str(payload)
+
+        # Publica e valida a entrega no broker
+        info = mqtt_client.publish(topico, mensagem_envio, qos=1)
+        print(f"📤 [MQTT ENVIADO] Tópico: {topico} | Payload: {mensagem_envio} | Status: {info.rc}")
+
+        return jsonify({"status": "sucesso", "codigo_envio": info.rc})
     
-    return jsonify({"status": "erro"}), 404
+    return jsonify({"status": "erro", "motivo": "Cliente não cadastrado"}), 404
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port, debug=True)
