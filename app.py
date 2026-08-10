@@ -107,13 +107,17 @@ def enviar_comando():
     if esp_id in clientes:
         topico = f"piscina/{esp_id}/comando"
         
-        # Converte dicionários/JSONs se necessário, mas mantém strings limpas
-        if isinstance(payload, (dict, list)):
+        # --- ADEQUAÇÃO PARA O ESP32 ---
+        # Se o payload for texto (ex: "LIGAR_MANUAL"), empacota em JSON {"comando": "LIGAR_MANUAL"}
+        # Se já for um objeto/dicionário (ex: ao programar horários), serializa normalmente.
+        if isinstance(payload, str):
+            mensagem_envio = json.dumps({"comando": payload})
+        elif isinstance(payload, dict):
             mensagem_envio = json.dumps(payload)
         else:
-            mensagem_envio = str(payload)
+            mensagem_envio = json.dumps({"comando": str(payload)})
 
-        # Publica e valida a entrega no broker
+        # Publica no broker MQTT
         info = mqtt_client.publish(topico, mensagem_envio, qos=1)
         print(f"📤 [MQTT ENVIADO] Tópico: {topico} | Payload: {mensagem_envio} | Status: {info.rc}")
 
