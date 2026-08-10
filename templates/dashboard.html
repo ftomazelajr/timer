@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AquaControl Pro - Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-body: #0f172a;
+            --bg-card: #1e293b;
+            --bg-input: #334155;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent-blue: #38bdf8;
+            --accent-green: #22c55e;
+            --accent-red: #ef4444;
+            --accent-yellow: #eab308;
+            --border: #334155;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Inter', sans-serif; background-color: var(--bg-body); color: var(--text-primary); padding: 24px; min-height: 100vh; }
+
+        .header { display: flex; justify-content: space-between; align-items: center; max-width: 1200px; margin: 0 auto 32px auto; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+        .header h1 { font-size: 24px; font-weight: 700; color: var(--accent-blue); display: flex; align-items: center; gap: 10px; }
+
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 24px; max-width: 1200px; margin: 0 auto; }
+
+        .card { background-color: var(--bg-card); border-radius: 16px; border: 1px solid var(--border); padding: 20px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3); position: relative; }
+
+        .card-header { display: flex; justify-content: space-between; align-items: flex-start; }
+        .client-title { font-size: 16px; font-weight: 600; color: var(--text-primary); }
+        .client-id { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+
+        .badge { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 12px; }
+        .badge-online { background: rgba(34, 197, 94, 0.15); color: var(--accent-green); }
+        .badge-offline { background: rgba(239, 68, 68, 0.15); color: var(--accent-red); }
+        .badge-dot { width: 6px; height: 6px; border-radius: 50%; background-color: currentColor; }
+
+        /* Banner de Alerta Offline */
+        .offline-alert { background: rgba(239, 68, 68, 0.1); border: 1px solid var(--accent-red); color: var(--accent-red); padding: 8px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; text-align: center; display: none; }
+
+        .motor-status-box { background: rgba(15, 23, 42, 0.6); padding: 14px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--border); }
+        .motor-state { font-size: 14px; font-weight: 600; }
+        .motor-state.ON { color: var(--accent-green); text-shadow: 0 0 10px rgba(34, 197, 94, 0.3); }
+        .motor-state.OFF { color: var(--text-secondary); }
+
+        .timer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; background: rgba(15, 23, 42, 0.4); padding: 12px; border-radius: 12px; }
+        .field-group { display: flex; flex-direction: column; gap: 4px; }
+        .field-group label { font-size: 11px; text-transform: uppercase; font-weight: 700; color: var(--text-secondary); }
+        input[type="time"] { background: var(--bg-input); border: 1px solid var(--border); color: var(--text-primary); padding: 8px; border-radius: 8px; font-family: inherit; font-size: 14px; outline: none; }
+
+        .actions { display: flex; gap: 10px; }
+        .btn { flex: 1; padding: 10px; border: none; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; transition: all 0.2s; display: flex; justify-content: center; align-items: center; gap: 6px; }
+        .btn:hover:not(:disabled) { opacity: 0.9; }
+        
+        .btn-primary { background: var(--accent-blue); color: #0f172a; }
+        .btn-success { background: var(--accent-green); color: #0f172a; }
+        .btn-danger { background: var(--accent-red); color: #ffffff; }
+        .btn-warning { background: var(--accent-yellow); color: #0f172a; }
+
+        .btn:disabled {
+            background-color: #334155 !important;
+            color: #64748b !important;
+            cursor: not-allowed !important;
+            opacity: 0.5 !important;
+            box-shadow: none !important;
+        }
+
+        .terminal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 11px; color: var(--text-secondary); font-weight: 600; }
+        .terminal-box { background: #090d16; border-radius: 8px; padding: 10px; font-family: 'Courier New', monospace; font-size: 11px; color: #38bdf8; height: 130px; overflow-y: auto; border: 1px solid #1e293b; }
+    </style>
+</head>
+<body>
+
+    <header class="header">
+        <h1>🌊 AquaControl Pro <span style="font-size: 12px; background: #0284c7; color: white; padding: 2px 8px; border-radius: 6px;">v2.1</span></h1>
+        <div id="total-summary" style="font-size: 14px; color: var(--text-secondary);">Sincronizando...</div>
+    </header>
+
+    <main class="grid" id="clients-grid"></main>
+
+    <script>
+        function carregarClientes() {
+            fetch('/api/clientes')
+                .then(res => res.json())
+                .then(data => {
+                    const grid = document.getElementById('clients-grid');
+                    
+                    for (const [espId, cliente] of Object.entries(data)) {
+                        let card = document.getElementById(`card-${espId}`);
+                        const motorEstaLigado = (cliente.status === 'ON');
+                        const estaOnline = cliente.online;
+                        
+                        if (!card) {
+                            grid.innerHTML += `
+                                <div class="card" id="card-${espId}">
+                                    <div class="card-header">
+                                        <div>
+                                            <div class="client-title">${cliente.nome}</div>
+                                            <div class="client-id">ID: ${espId}</div>
+                                        </div>
+                                        <span class="badge ${estaOnline ? 'badge-online' : 'badge-offline'}" id="badge-${espId}">
+                                            <span class="badge-dot"></span>
+                                            <span id="badge-text-${espId}">${estaOnline ? 'Online' : 'Offline'}</span>
+                                        </span>
+                                    </div>
+
+                                    <div class="offline-alert" id="alert-${espId}">
+                                        ⚠️ ESP32 desconectada! Verifique a energia ou Wi-Fi.
+                                    </div>
+
+                                    <div class="motor-status-box">
+                                        <span style="font-size: 13px; color: var(--text-secondary);">Status do Motor</span>
+                                        <span class="motor-state ${cliente.status}" id="status-${espId}">● ${motorEstaLigado ? 'EM OPERAÇÃO (LIGADO)' : 'DESLIGADO'}</span>
+                                    </div>
+
+                                    <div class="timer-grid">
+                                        <div class="field-group">
+                                            <label>Ligar às</label>
+                                            <input type="time" id="liga-${espId}" value="${cliente.timer_liga}" ${!estaOnline ? 'disabled' : ''}>
+                                        </div>
+                                        <div class="field-group">
+                                            <label>Desligar às</label>
+                                            <input type="time" id="desliga-${espId}" value="${cliente.timer_desliga}" ${!estaOnline ? 'disabled' : ''}>
+                                        </div>
+                                    </div>
+
+                                    <button class="btn btn-primary" id="btn-salvar-${espId}" ${!estaOnline ? 'disabled' : ''} onclick="salvarProgramacao('${espId}')">💾 Salvar Horários</button>
+
+                                    <div class="actions">
+                                        <button class="btn btn-success" id="btn-ligar-${espId}" ${(!estaOnline || motorEstaLigado) ? 'disabled' : ''} onclick="enviarComando('${espId}', 'LIGAR_MANUAL')">▶ Activar</button>
+                                        <button class="btn btn-danger" id="btn-desligar-${espId}" ${(!estaOnline || !motorEstaLigado) ? 'disabled' : ''} onclick="enviarComando('${espId}', 'DESLIGAR_MANUAL')">⏹ Parar</button>
+                                    </div>
+
+                                    <div class="actions">
+                                        <button class="btn" style="background: #334155; color: white;" id="btn-check-${espId}" ${!estaOnline ? 'disabled' : ''} onclick="enviarComando('${espId}', 'CHECK_TIME')">🕒 Relógio do ESP</button>
+                                    </div>
+
+                                    <div>
+                                        <div class="terminal-header">
+                                            <span>TERMINAL DE LOGS</span>
+                                            <span style="cursor: pointer; color: var(--accent-blue);" onclick="limparLogsTerminal('${espId}')">Limpar</span>
+                                        </div>
+                                        <div class="terminal-box" id="terminal-${espId}"></div>
+                                    </div>
+                                </div>
+                            `;
+                        } else {
+                            // Atualiza Badge Online/Offline
+                            const badge = document.getElementById(`badge-${espId}`);
+                            badge.className = `badge ${estaOnline ? 'badge-online' : 'badge-offline'}`;
+                            document.getElementById(`badge-text-${espId}`).innerText = estaOnline ? 'Online' : 'Offline';
+
+                            // Exibe / Oculta Alerta de Placa Offline
+                            const alertBox = document.getElementById(`alert-${espId}`);
+                            alertBox.style.display = estaOnline ? 'none' : 'block';
+
+                            // Atualiza Texto de Status do Motor
+                            const elemStatus = document.getElementById(`status-${espId}`);
+                            elemStatus.className = `motor-state ${estaOnline ? cliente.status : 'OFF'}`;
+                            elemStatus.innerText = `● ${estaOnline && motorEstaLigado ? 'EM OPERAÇÃO (LIGADO)' : 'DESLIGADO'}`;
+                            
+                            // BLOQUEIO INTELIGENTE DE BOTÕES
+                            document.getElementById(`btn-ligar-${espId}`).disabled = (!estaOnline || motorEstaLigado);
+                            document.getElementById(`btn-desligar-${espId}`).disabled = (!estaOnline || !motorEstaLigado);
+                            document.getElementById(`btn-salvar-${espId}`).disabled = !estaOnline;
+                            document.getElementById(`btn-check-${espId}`).disabled = !estaOnline;
+                            document.getElementById(`liga-${espId}`).disabled = !estaOnline;
+                            document.getElementById(`desliga-${espId}`).disabled = !estaOnline;
+
+                            // Atualiza Caixas de Horários se o usuário não estiver digitando
+                            if (document.activeElement !== document.getElementById(`liga-${espId}`)) {
+                                document.getElementById(`liga-${espId}`).value = cliente.timer_liga;
+                            }
+                            if (document.activeElement !== document.getElementById(`desliga-${espId}`)) {
+                                document.getElementById(`desliga-${espId}`).value = cliente.timer_desliga;
+                            }
+
+                            // Atualiza Terminal de Logs
+                            const terminal = document.getElementById(`terminal-${espId}`);
+                            terminal.innerHTML = cliente.logs.join('<br>');
+                            terminal.scrollTop = terminal.scrollHeight;
+                        }
+                    }
+
+                    document.getElementById('total-summary').innerText = `Sistemas Cadastrados: ${Object.keys(data).length}`;
+                });
+        }
+
+        function salvarProgramacao(espId) {
+            const horaLiga = document.getElementById(`liga-${espId}`).value.split(':');
+            const horaDesliga = document.getElementById(`desliga-${espId}`).value.split(':');
+
+            const payload = {
+                comando: "SET_TIMER",
+                hora_ligar: parseInt(horaLiga[0]),
+                min_ligar: parseInt(horaLiga[1]),
+                hora_desligar: parseInt(horaDesliga[0]),
+                min_desligar: parseInt(horaDesliga[1])
+            };
+
+            enviarParaServidor(espId, payload);
+        }
+
+        function enviarComando(espId, acao) {
+            enviarParaServidor(espId, { comando: acao });
+        }
+
+        function enviarParaServidor(espId, payload) {
+            fetch('/api/comando', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ esp_id: espId, payload: payload })
+            });
+        }
+
+        function limparLogsTerminal(espId) {
+            document.getElementById(`terminal-${espId}`).innerHTML = '';
+        }
+
+        setInterval(carregarClientes, 1500);
+        carregarClientes();
+    </script>
+</body>
+</html>
