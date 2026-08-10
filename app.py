@@ -25,6 +25,18 @@ def adicionar_log(esp_id, mensagem):
         if len(clientes[esp_id]["logs"]) > 20:
             clientes[esp_id]["logs"].pop(0)
 
+# --- CALLBACK DE CONEXÃO (Garante re-inscrição se a conexão oscilar no Render) ---
+def on_connect(client, userdata, flags, rc, properties=None):
+    if rc == 0:
+        print("✅ Conectado ao Broker MQTT no Render!")
+        # Inscreve nos tópicos SEMPRE que conectar/reconectar
+        client.subscribe("piscina/+/logs")
+        client.subscribe("piscina/+/status")
+        client.subscribe("piscina/+/config")
+    else:
+        print(f"❌ Falha ao conectar ao MQTT, código de retorno: {rc}")
+
+# --- CALLBACK DE MENSAGENS RECEBIDAS ---
 def on_message(client, userdata, msg):
     try:
         topico = msg.topic.split('/')
@@ -58,14 +70,16 @@ def on_message(client, userdata, msg):
     except Exception as e:
         print(f"Erro ao processar mensagem MQTT: {e}")
 
-mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+# --- INICIALIZAÇÃO MQTT (COMPATÍVEL COM PAHO V2 E RENDER) ---
+mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="SERVER_FLASK_PISCINA")
+mqtt_client.on_connect = on_connect
 mqtt_client.on_message = on_message
-mqtt_client.connect(MQTT_BROKER, MQTT_PORT, 60)
 
-mqtt_client.subscribe("piscina/+/logs")
-mqtt_client.subscribe("piscina/+/status")
-mqtt_client.subscribe("piscina/+/config")
-mqtt_client.loop_start()
+try:
+    mqtt_client.connect(MQTT_BROKER, MQTT_PORT, 60)
+    mqtt_client.loop_start()
+except Exception as e:
+    print(f"Erro ao iniciar cliente MQTT: {e}")
 
 @app.route('/')
 def index():
