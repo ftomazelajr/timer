@@ -14,8 +14,8 @@ clientes = {
         "nome": "Residência Conchas - Piscina Principal",
         "status": "OFF",
         "online": True,
-        "timer_liga": "--:--",
-        "timer_desliga": "--:--",
+        "timer_liga": "08:00",     # Corrigido: formato HH:mm padrão válido
+        "timer_desliga": "10:00",  # Corrigido: formato HH:mm padrão válido
         "logs": []
     }
 }
