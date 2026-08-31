@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 from flask import Flask, render_template, request, jsonify
+=======
+from flask import Flask, render_template, request, jsonify, send_from_directory
+>>>>>>> 0098500 (Upload do projeto adm_piscina_timer)
 import paho.mqtt.client as mqtt
 import json
 import random
@@ -9,13 +13,29 @@ app = Flask(__name__)
 MQTT_BROKER = "broker.hivemq.com"
 MQTT_PORT = 1883
 
+<<<<<<< HEAD
+=======
+# --- ESTRUTURA COM IP E MÚLTIPLOS HORÁRIOS ---
+>>>>>>> 0098500 (Upload do projeto adm_piscina_timer)
 clientes = {
     "PISCINA_CLIENTE_001": {
         "nome": "Residência Conchas - Piscina Principal",
         "status": "OFF",
+<<<<<<< HEAD
         "online": True,
         "timer_liga": "08:00",     # Corrigido: formato HH:mm padrão válido
         "timer_desliga": "10:00",  # Corrigido: formato HH:mm padrão válido
+=======
+        "ip": "Desconhecido",  # IP Local do ESP32 na rede do cliente
+        "online": True,
+        "qtd_programacoes": 4,
+        "programacoes": [
+            {"id": 1, "hora": 8, "minuto": 0, "duracao": 60, "ativo": True},
+            {"id": 2, "hora": 12, "minuto": 0, "duracao": 60, "ativo": True},
+            {"id": 3, "hora": 16, "minuto": 0, "duracao": 60, "ativo": True},
+            {"id": 4, "hora": 20, "minuto": 0, "duracao": 60, "ativo": True}
+        ],
+>>>>>>> 0098500 (Upload do projeto adm_piscina_timer)
         "logs": []
     }
 }
@@ -30,7 +50,10 @@ def adicionar_log(esp_id, mensagem):
 def on_connect(client, userdata, flags, rc, properties=None):
     if rc == 0:
         print("✅ [MQTT] Conectado com sucesso ao Broker HiveMQ!")
+<<<<<<< HEAD
         # Inscreve nos tópicos dinâmicos do cliente
+=======
+>>>>>>> 0098500 (Upload do projeto adm_piscina_timer)
         client.subscribe("piscina/+/logs")
         client.subscribe("piscina/+/status")
         client.subscribe("piscina/+/config")
@@ -57,11 +80,25 @@ def on_message(client, userdata, msg):
                     clientes[esp_id]["status"] = "OFF"
                     adicionar_log(esp_id, "⚠️ Placa desconectada ou sem energia.")
                 else:
+<<<<<<< HEAD
                     clientes[esp_id]["status"] = payload
+=======
+                    if payload.startswith('{') and payload.endswith('}'):
+                        try:
+                            dados_status = json.loads(payload)
+                            clientes[esp_id]["status"] = dados_status.get("status", "OFF")
+                            clientes[esp_id]["ip"] = dados_status.get("ip", clientes[esp_id]["ip"])
+                        except json.JSONDecodeError:
+                            clientes[esp_id]["status"] = payload
+                    else:
+                        clientes[esp_id]["status"] = payload
+                    
+>>>>>>> 0098500 (Upload do projeto adm_piscina_timer)
                     clientes[esp_id]["online"] = True
             
             elif tipo == "config":
                 dados = json.loads(payload)
+<<<<<<< HEAD
                 h_l = str(dados.get('hora_ligar', 0)).zfill(2)
                 m_l = str(dados.get('min_ligar', 0)).zfill(2)
                 h_d = str(dados.get('hora_desligar', 0)).zfill(2)
@@ -74,6 +111,19 @@ def on_message(client, userdata, msg):
         print(f"⚠️ Erro ao processar mensagem MQTT recebida: {e}")
 
 # --- CLIENT ID DINÂMICO (Impede desconexão automática no HiveMQ) ---
+=======
+                
+                if "qtd_programacoes" in dados:
+                    clientes[esp_id]["qtd_programacoes"] = dados.get("qtd_programacoes", 4)
+                
+                if "programacoes" in dados and isinstance(dados["programacoes"], list):
+                    clientes[esp_id]["programacoes"] = dados["programacoes"]
+
+    except Exception as e:
+        print(f"⚠️ Erro ao processar mensagem MQTT recebida: {e}")
+
+# --- CLIENT ID DINÂMICO ---
+>>>>>>> 0098500 (Upload do projeto adm_piscina_timer)
 CLIENT_ID = f"SERVER_FLASK_{random.randint(10000, 99999)}"
 
 mqtt_client = mqtt.Client(
@@ -94,6 +144,14 @@ except Exception as e:
 def index():
     return render_template('dashboard.html')
 
+<<<<<<< HEAD
+=======
+# [NOVO] ROTA PARA SERVIR O FIRMWARE.BIN DO ESP32
+@app.route('/static/<path:filename>')
+def servir_firmware(filename):
+    return send_from_directory('static', filename)
+
+>>>>>>> 0098500 (Upload do projeto adm_piscina_timer)
 @app.route('/api/clientes', methods=['GET'])
 def listar_clientes():
     return jsonify(clientes)
@@ -107,9 +165,12 @@ def enviar_comando():
     if esp_id in clientes:
         topico = f"piscina/{esp_id}/comando"
         
+<<<<<<< HEAD
         # --- ADEQUAÇÃO PARA O ESP32 ---
         # Se o payload for texto (ex: "LIGAR_MANUAL"), empacota em JSON {"comando": "LIGAR_MANUAL"}
         # Se já for um objeto/dicionário (ex: ao programar horários), serializa normalmente.
+=======
+>>>>>>> 0098500 (Upload do projeto adm_piscina_timer)
         if isinstance(payload, str):
             mensagem_envio = json.dumps({"comando": payload})
         elif isinstance(payload, dict):
@@ -117,7 +178,10 @@ def enviar_comando():
         else:
             mensagem_envio = json.dumps({"comando": str(payload)})
 
+<<<<<<< HEAD
         # Publica no broker MQTT
+=======
+>>>>>>> 0098500 (Upload do projeto adm_piscina_timer)
         info = mqtt_client.publish(topico, mensagem_envio, qos=1)
         print(f"📤 [MQTT ENVIADO] Tópico: {topico} | Payload: {mensagem_envio} | Status: {info.rc}")
 
