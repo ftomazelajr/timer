@@ -9,19 +9,32 @@ app = Flask(__name__)
 MQTT_BROKER = "broker.hivemq.com"
 MQTT_PORT = 1883
 
-# --- ESTRUTURA COM IP E MÚLTIPLOS HORÁRIOS ---
+# --- ESTRUTURA COM IP, RTC E MÚLTIPLOS HORÁRIOS ---
 clientes = {
     "PISCINA_CLIENTE_001": {
         "nome": "Residência Conchas - Piscina Principal",
         "status": "OFF",
-        "ip": "Desconhecido",  # IP Local do ESP32 na rede do cliente
+        "ip": "Desconhecido",
         "online": True,
+        "rtc_status": "OK",
         "qtd_programacoes": 4,
         "programacoes": [
             {"id": 1, "hora": 8, "minuto": 0, "duracao": 60, "ativo": True},
             {"id": 2, "hora": 12, "minuto": 0, "duracao": 60, "ativo": True},
             {"id": 3, "hora": 16, "minuto": 0, "duracao": 60, "ativo": True},
             {"id": 4, "hora": 20, "minuto": 0, "duracao": 60, "ativo": True}
+        ],
+        "logs": []
+    },
+    "PISCINA_CLIENTE_002": {
+        "nome": "Residência Conchas - Piscina Secundária",
+        "status": "OFF",
+        "ip": "Desconhecido",
+        "online": True,
+        "rtc_status": "OK",
+        "qtd_programacoes": 1,
+        "programacoes": [
+            {"id": 1, "hora": 9, "minuto": 0, "duracao": 30, "ativo": True}
         ],
         "logs": []
     }
@@ -56,6 +69,10 @@ def on_message(client, userdata, msg):
         if esp_id in clientes:
             if tipo == "logs":
                 adicionar_log(esp_id, payload)
+                if "RTC não encontrado" in payload:
+                    clientes[esp_id]["rtc_status"] = "ERRO"
+                elif "sincronizado com a internet" in payload:
+                    clientes[esp_id]["rtc_status"] = "SINCRONIZADO"
             
             elif tipo == "status":
                 if payload == "OFFLINE":
@@ -139,6 +156,19 @@ def enviar_comando():
         return jsonify({"status": "sucesso", "codigo_envio": info.rc})
     
     return jsonify({"status": "erro", "motivo": "Cliente não cadastrado"}), 404
+
+@app.route('/api/check_time', methods=['POST'])
+def checar_tempo_rtc():
+    dados = request.json
+    esp_id = dados.get('esp_id')
+    
+    if esp_id in clientes:
+        topico = f"piscina/{esp_id}/comando"
+        mensagem_envio = json.dumps({"comando": "CHECK_TIME"})
+        info = mqtt_client.publish(topico, mensagem_envio, qos=1)
+        return jsonify({"status": "sucesso", "mensagem": "Solicitação de hora enviada ao RTC."})
+    
+    return jsonify({"status": "erro", "motivo": "Cliente não encontrado"}), 404
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))

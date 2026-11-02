@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AquaControl Pro - Dashboard</title>
+    <title>AquaControl Pro v2.4 - Dashboard</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -42,8 +42,9 @@
 
         .offline-alert { background: rgba(239, 68, 68, 0.1); border: 1px solid var(--accent-red); color: var(--accent-red); padding: 8px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; text-align: center; display: none; }
 
-        .motor-status-box { background: rgba(15, 23, 42, 0.6); padding: 14px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--border); }
-        .motor-state { font-size: 14px; font-weight: 600; }
+        .motor-status-box { background: rgba(15, 23, 42, 0.6); padding: 14px; border-radius: 12px; display: flex; flex-direction: column; gap: 8px; border: 1px solid var(--border); }
+        .status-row { display: flex; justify-content: space-between; align-items: center; }
+        .motor-state { font-size: 13px; font-weight: 600; }
         .motor-state.ON { color: var(--accent-green); text-shadow: 0 0 10px rgba(34, 197, 94, 0.3); }
         .motor-state.OFF { color: var(--text-secondary); }
 
@@ -54,7 +55,8 @@
         .timer-row { display: flex; align-items: center; gap: 8px; background: var(--bg-card); padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); }
         
         .timer-row input[type="time"] { background: var(--bg-input); border: 1px solid var(--border); color: var(--text-primary); padding: 6px; border-radius: 6px; font-size: 13px; outline: none; }
-        .timer-row input[type="number"] { background: var(--bg-input); border: 1px solid var(--border); color: var(--text-primary); padding: 6px; border-radius: 6px; font-size: 13px; width: 70px; outline: none; }
+        .timer-row input[type="number"] { background: var(--bg-input); border: 1px solid var(--border); color: var(--text-primary); padding: 6px; border-radius: 6px; font-size: 13px; width: 65px; outline: none; }
+        .timer-row select { background: var(--bg-input); border: 1px solid var(--border); color: var(--text-primary); padding: 6px; border-radius: 6px; font-size: 12px; outline: none; }
         
         .toggle-switch { display: flex; align-items: center; cursor: pointer; gap: 4px; font-size: 11px; color: var(--text-secondary); }
         .toggle-switch input { display: none; }
@@ -82,13 +84,18 @@
         .btn:disabled { background-color: #334155 !important; color: #64748b !important; border: none !important; cursor: not-allowed !important; opacity: 0.5 !important; box-shadow: none !important; }
 
         .terminal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 11px; color: var(--text-secondary); font-weight: 600; }
-        .terminal-box { background: #090d16; border-radius: 8px; padding: 10px; font-family: 'Courier New', monospace; font-size: 11px; color: #38bdf8; height: 110px; overflow-y: auto; border: 1px solid #1e293b; }
+        .terminal-box { background: #090d16; border-radius: 8px; padding: 10px; font-family: 'Courier New', monospace; font-size: 11px; color: #38bdf8; height: 110px; overflow-y: auto; border: 1px solid #1e293b; line-height: 1.4; }
+        
+        /* Modificadores de cor para logs */
+        .log-error { color: var(--accent-red); }
+        .log-warn { color: var(--accent-yellow); }
+        .log-success { color: var(--accent-green); }
     </style>
 </head>
 <body>
 
     <header class="header">
-        <h1>🌊 AquaControl Pro <span style="font-size: 12px; background: #0284c7; color: white; padding: 2px 8px; border-radius: 6px;">v2.3</span></h1>
+        <h1>🌊 AquaControl Pro <span style="font-size: 12px; background: #0284c7; color: white; padding: 2px 8px; border-radius: 6px;">v2.4</span></h1>
         <div id="total-summary" style="font-size: 14px; color: var(--text-secondary);">Sincronizando...</div>
     </header>
 
@@ -96,6 +103,7 @@
 
     <script>
         let agendaLocal = {};
+        let editandoAgenda = {}; 
 
         function carregarClientes() {
             fetch('/api/clientes')
@@ -106,12 +114,14 @@
                     for (const [espId, cliente] of Object.entries(data)) {
                         let card = document.getElementById(`card-${espId}`);
                         const motorEstaLigado = (cliente.status === 'ON');
+                        const dosadorEstaLigado = (cliente.status_dosador === 'ON');
                         const estaOnline = cliente.online;
                         const ipCliente = cliente.ip || "Desconhecido";
                         
-                        if (!agendaLocal[espId]) {
+                        // Garante sincronia inicial do cliente sem sobrescrever se o usuário estiver editando
+                        if (!agendaLocal[espId] || !editandoAgenda[espId]) {
                             agendaLocal[espId] = cliente.programacoes || [
-                                { hora: 8, minuto: 0, duracao: 60, ativo: true }
+                                { hora: 8, minuto: 0, duracao: 60, canal: "Bomba Principal", ativo: true }
                             ];
                         }
 
@@ -133,18 +143,24 @@
                                 </div>
 
                                 <div class="offline-alert" id="alert-${espId}">
-                                    ⚠️ ESP32 desconectada! Verifique a energia ou Wi-Fi.
+                                    ⚠️ ESP32 desconectada! Verifique a alimentação ou o sinal Wi-Fi.
                                 </div>
 
                                 <div class="motor-status-box">
-                                    <span style="font-size: 13px; color: var(--text-secondary);">Status do Motor</span>
-                                    <span class="motor-state ${cliente.status}" id="status-${espId}">● ${motorEstaLigado ? 'EM OPERAÇÃO (LIGADO)' : 'DESLIGADO'}</span>
+                                    <div class="status-row">
+                                        <span style="font-size: 12px; color: var(--text-secondary);">Bomba Principal</span>
+                                        <span class="motor-state ${cliente.status}" id="status-${espId}">● ${motorEstaLigado ? 'LIGADO' : 'DESLIGADO'}</span>
+                                    </div>
+                                    <div class="status-row">
+                                        <span style="font-size: 12px; color: var(--text-secondary);">Dosador de Químicos</span>
+                                        <span class="motor-state ${cliente.status_dosador || 'OFF'}" id="status-dosador-${espId}">● ${dosadorEstaLigado ? 'LIGADO' : 'DESLIGADO'}</span>
+                                    </div>
                                 </div>
 
                                 <div>
                                     <div class="section-header">
-                                        <span class="section-title">Programação Diária</span>
-                                        <button class="btn-add" onclick="adicionarHorario('${espId}')">+ Horário</button>
+                                        <span class="section-title">Programação Automática</span>
+                                        <button class="btn-add" onclick="adicionarHorario('${espId}')">+ Agendar</button>
                                     </div>
                                     <div class="timer-list" id="timer-list-${espId}"></div>
                                 </div>
@@ -152,18 +168,18 @@
                                 <button class="btn btn-primary" id="btn-salvar-${espId}" ${!estaOnline ? 'disabled' : ''} onclick="salvarProgramacao('${espId}')">💾 Salvar Horários no ESP</button>
 
                                 <div class="actions">
-                                    <button class="btn btn-success" id="btn-ligar-${espId}" ${(!estaOnline || motorEstaLigado) ? 'disabled' : ''} onclick="enviarComando('${espId}', 'LIGAR_MANUAL')">▶ Activar</button>
-                                    <button class="btn btn-danger" id="btn-desligar-${espId}" ${(!estaOnline || !motorEstaLigado) ? 'disabled' : ''} onclick="enviarComando('${espId}', 'DESLIGAR_MANUAL')">⏹ Parar</button>
+                                    <button class="btn btn-success" id="btn-ligar-${espId}" ${(!estaOnline || motorEstaLigado) ? 'disabled' : ''} onclick="enviarComando('${espId}', 'LIGAR_MANUAL')">▶ Liga Bomba</button>
+                                    <button class="btn btn-danger" id="btn-desligar-${espId}" ${(!estaOnline || !motorEstaLigado) ? 'disabled' : ''} onclick="enviarComando('${espId}', 'DESLIGAR_MANUAL')">⏹ Para Bomba</button>
                                 </div>
 
                                 <div class="actions">
-                                    <button class="btn" style="background: #334155; color: white;" id="btn-check-${espId}" ${!estaOnline ? 'disabled' : ''} onclick="enviarComando('${espId}', 'CHECK_TIME')">🕒 Relógio do ESP</button>
-                                    <button class="btn btn-ota" id="btn-ota-${espId}" ${!estaOnline ? 'disabled' : ''} onclick="confirmarAtualizacao('${espId}')">🔄 Atualizar OTA</button>
+                                    <button class="btn" style="background: #334155; color: white;" id="btn-check-${espId}" ${!estaOnline ? 'disabled' : ''} onclick="enviarComando('${espId}', 'CHECK_TIME')">🕒 Sync Hora</button>
+                                    <button class="btn btn-ota" id="btn-ota-${espId}" ${!estaOnline ? 'disabled' : ''} onclick="confirmarAtualizacao('${espId}')">🔄 Firmware OTA</button>
                                 </div>
 
                                 <div>
                                     <div class="terminal-header">
-                                        <span>TERMINAL DE LOGS</span>
+                                        <span>LOGS DE EVENTOS</span>
                                         <span style="cursor: pointer; color: var(--accent-blue);" onclick="limparLogsTerminal('${espId}')">Limpar</span>
                                     </div>
                                     <div class="terminal-box" id="terminal-${espId}"></div>
@@ -173,7 +189,7 @@
                             renderizarHorarios(espId);
                         }
 
-                        // Atualização periódica dos elementos
+                        // Atualizações de estado do card
                         const badge = document.getElementById(`badge-${espId}`);
                         badge.className = `badge ${estaOnline ? 'badge-online' : 'badge-offline'}`;
                         document.getElementById(`badge-text-${espId}`).innerText = estaOnline ? 'Online' : 'Offline';
@@ -185,7 +201,13 @@
 
                         const elemStatus = document.getElementById(`status-${espId}`);
                         elemStatus.className = `motor-state ${estaOnline ? cliente.status : 'OFF'}`;
-                        elemStatus.innerText = `● ${estaOnline && motorEstaLigado ? 'EM OPERAÇÃO (LIGADO)' : 'DESLIGADO'}`;
+                        elemStatus.innerText = `● ${estaOnline && motorEstaLigado ? 'EM OPERAÇÃO' : 'DESLIGADO'}`;
+
+                        const elemStatusDosador = document.getElementById(`status-dosador-${espId}`);
+                        if (elemStatusDosador) {
+                            elemStatusDosador.className = `motor-state ${estaOnline ? (cliente.status_dosador || 'OFF') : 'OFF'}`;
+                            elemStatusDosador.innerText = `● ${estaOnline && dosadorEstaLigado ? 'DOSANDO' : 'DESLIGADO'}`;
+                        }
                         
                         document.getElementById(`btn-ligar-${espId}`).disabled = (!estaOnline || motorEstaLigado);
                         document.getElementById(`btn-desligar-${espId}`).disabled = (!estaOnline || !motorEstaLigado);
@@ -193,13 +215,22 @@
                         document.getElementById(`btn-check-${espId}`).disabled = !estaOnline;
                         document.getElementById(`btn-ota-${espId}`).disabled = !estaOnline;
 
+                        // Renderiza os logs com suporte a quebras de linha e destaque visual
                         const terminal = document.getElementById(`terminal-${espId}`);
-                        terminal.innerHTML = cliente.logs ? cliente.logs.join('<br>') : '';
-                        terminal.scrollTop = terminal.scrollHeight;
+                        if (cliente.logs) {
+                            terminal.innerHTML = cliente.logs.map(log => {
+                                if (log.includes('ERRO') || log.includes('Falha')) return `<span class="log-error">${log}</span>`;
+                                if (log.includes('ALERTA') || log.includes('OTA')) return `<span class="log-warn">${log}</span>`;
+                                if (log.includes('Sucesso') || log.includes('OK')) return `<span class="log-success">${log}</span>`;
+                                return log;
+                            }).join('<br>');
+                            terminal.scrollTop = terminal.scrollHeight;
+                        }
                     }
 
-                    document.getElementById('total-summary').innerText = `Sistemas Cadastrados: ${Object.keys(data).length}`;
-                });
+                    document.getElementById('total-summary').innerText = `Sistemas Ativos: ${Object.keys(data).length}`;
+                })
+                .catch(err => console.error("Erro na comunicação com o backend:", err));
         }
 
         function renderizarHorarios(espId) {
@@ -219,7 +250,10 @@
                         </label>
                         <input type="time" value="${horaStr}" onchange="atualizarHoraHorario('${espId}', ${index}, this.value)">
                         <input type="number" value="${p.duracao}" min="1" max="1440" placeholder="min" onchange="atualizarDuracaoHorario('${espId}', ${index}, this.value)" title="Duração em minutos">
-                        <span style="font-size: 11px; color: var(--text-secondary);">min</span>
+                        <select onchange="atualizarCanalHorario('${espId}', ${index}, this.value)">
+                            <option value="Bomba Principal" ${p.canal === 'Bomba Principal' ? 'selected' : ''}>Bomba</option>
+                            <option value="Dosador Químico" ${p.canal === 'Dosador Químico' ? 'selected' : ''}>Dosador</option>
+                        </select>
                         <button class="btn-icon" onclick="removerHorario('${espId}', ${index})">✕</button>
                     </div>
                 `;
@@ -227,33 +261,48 @@
             });
         }
 
+        function marcarComoEditando(espId) {
+            editandoAgenda[espId] = true;
+        }
+
         function adicionarHorario(espId) {
+            marcarComoEditando(espId);
             if (!agendaLocal[espId]) agendaLocal[espId] = [];
-            agendaLocal[espId].push({ hora: 10, minuto: 0, duracao: 30, ativo: true });
+            agendaLocal[espId].push({ hora: 10, minuto: 0, duracao: 30, canal: "Bomba Principal", ativo: true });
             renderizarHorarios(espId);
         }
 
         function removerHorario(espId, index) {
+            marcarComoEditando(espId);
             agendaLocal[espId].splice(index, 1);
             renderizarHorarios(espId);
         }
 
         function alternarStatusHorario(espId, index, status) {
+            marcarComoEditando(espId);
             agendaLocal[espId][index].ativo = status;
         }
 
         function atualizarHoraHorario(espId, index, valorTime) {
             if (!valorTime) return;
+            marcarComoEditando(espId);
             const partes = valorTime.split(':');
             agendaLocal[espId][index].hora = parseInt(partes[0]);
             agendaLocal[espId][index].minuto = parseInt(partes[1]);
         }
 
         function atualizarDuracaoHorario(espId, index, duracao) {
+            marcarComoEditando(espId);
             agendaLocal[espId][index].duracao = parseInt(duracao) || 1;
         }
 
+        function atualizarCanalHorario(espId, index, canal) {
+            marcarComoEditando(espId);
+            agendaLocal[espId][index].canal = canal;
+        }
+
         function salvarProgramacao(espId) {
+            editandoAgenda[espId] = false; // Libera sincronização contínua
             const payload = {
                 comando: "SET_TIMER",
                 qtd: agendaLocal[espId].length,
@@ -285,7 +334,7 @@
             document.getElementById(`terminal-${espId}`).innerHTML = '';
         }
 
-        setInterval(carregarClientes, 1500);
+        setInterval(carregarClientes, 2000);
         carregarClientes();
     </script>
 </body>
